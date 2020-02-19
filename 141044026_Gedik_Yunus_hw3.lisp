@@ -1,0 +1,593 @@
+(defun gppinterpreter(&optional filename)
+
+    (if (string= filename nil)
+        (revap)
+        (let ((in (open filename :if-does-not-exist nil)))
+            (loop for line = (read-line in nil :eof) 
+                until (eq line :eof)
+                do
+                    (if (string= line "(exit)")
+                        (return-from gppinterpreter)
+                        (evap line)
+                    )
+            )
+            (close in)
+        )
+    )
+)
+
+(defun revap ()
+    (loop 
+        (setq line (read-line))
+        (if (string= line "(exit)")
+            (return-from revap)
+            (evap line)
+        )
+    )
+)
+
+(defun realevap (line)
+    (let ((op 0) (cp 0) (result 0))
+        (if (not (string= (subseq line 0 1) "(" ))
+            (return-from realevap "SYNTAX_ERROR: line should begin with '('")
+            (progn
+                (setq op (+ op 1))
+                (setq line (subseq line 1 (length line)))
+                (if (or (string= (subseq line 0 1) "+" ) (string= (subseq line 0 1) "-" ) (string= (subseq line 0 1) "*" ) (string= (subseq line 0 1) "/" ))
+                    (progn
+                        (setq result (oper line))
+                    )
+                    (if (or (string= (car (space-split line)) "list") (string= (car (brace-split line)) "list"))
+                        (progn
+                            (setq result (lister line))
+                        )
+                        (if (string= (car (space-split line)) "not")
+                            (setq result (nope line))
+                            (if (string= (car (space-split line)) "equal")
+                                (setq result (equ line))
+                                (if (string= (car (space-split line)) "or")
+                                    (setq result (orr line))
+                                    (if (string= (car (space-split line)) "and")
+                                        (setq result (andd line))
+                                        (if (string= (car (brace-split line)) "true")
+                                            (setq result t)
+                                            (if (or (string= (car (brace-split line)) "false") (string= (car (brace-split line)) "nil"))
+                                                (setq result nil)
+                                                (if (string= (car (space-split line)) "set")
+                                                    (setq result (sett line))
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+                (return-from realevap result)
+            )
+        )
+    )
+)
+
+(defun sett (line)
+    (setq line (subseq line 3 (length line)))
+    (if (string= " " (subseq line 0 1))
+        (progn
+            (setq line (subseq line 1 (length line)))
+            (block dell
+                (setq line (subseq line 1 (length line)))
+                (loop
+                    (if (string= " " (subseq line 0 1))
+                        (return-from dell)
+                        (progn
+                            (setq line (subseq line 1 (length line)))
+                        )
+                    )
+                )
+            )
+            (if (string= " " (subseq line 0 1))
+                (progn
+                    (setq line (subseq line 1 (length line)))
+                    (if (string= (subseq line 0 1) "(")
+                        (return-from sett (realevap line))
+                        (return-from sett (car (brace-split line)))
+                    )
+                )
+            )
+        )
+        (progn
+            (print "SYNTAX_ERROR")
+            (return-from sett)
+        )
+    )
+)
+
+(defun andd (line)
+    (setq line (subseq line 3 (length line)))
+
+    (let ((p 0))
+        (loop
+            (if (string= " " (subseq line 0 1))
+                (progn
+                    (setq line (subseq line 1 (length line)))
+                    (if (string= (subseq line 0 1) "(")
+                        (progn
+                            (if (not (realevap line))
+                                (return-from orr nil)
+                            )
+                        )
+                        (block iff
+                            (progn
+                                (if (or (subtypep (type-of (read-from-string (car (space-split line)))) 'INTEGER) (subtypep (type-of (read-from-string (car (space-split line)))) 'float))
+                                    (return-from iff)
+                                    (if (string= "\"" (subseq line 0 1))
+                                        (return-from iff)
+                                        (if (string= (read-from-string (car (space-split line))) "T")
+                                            (return-from iff)
+                                            (progn
+                                                (if (string= (read-from-string (car (space-split line))) "NIL")
+                                                    (return-from andd nil)
+                                                    (if (string= ")" (subseq line 0 1))
+                                                        (return-from andd t)
+                                                        (progn
+                                                            (print "SYNTAX_ERROR")
+                                                            (return-from andd)
+                                                        )
+                                                    )
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                    (if (string= "(" (subseq line 0 1))
+                        (block del
+                            (loop
+                                (if (string= "(" (subseq line 0 1))
+                                    (progn
+                                        (setq p (+ p 1))
+                                        (setq line (subseq line 1 (length line)))
+                                    )
+                                    (if (string= ")" (subseq line 0 1))
+                                        (progn
+                                            (setq p (- p 1))
+                                            (setq line (subseq line 1 (length line)))
+                                        )
+                                        (setq line (subseq line 1 (length line)))
+                                    )
+                                )
+                                (if (= p 0)
+                                    (return-from del)
+                                )
+                            )
+                        )
+                        (block dell
+                            (loop
+                                (if (or (string= ")" (subseq line 0 1)) (string= " " (subseq line 0 1)))
+                                    (return-from dell)
+                                    (progn
+                                        (setq line (subseq line 1 (length line)))
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+                (progn
+                    (if (string= ")" (subseq line 0 1))
+                        (return-from andd t)
+                        (progn
+                            (print "SYNTAX_ERROR")
+                            (return-from andd)
+                        )
+                    )
+                )
+            )
+        )
+    )
+
+
+)
+
+(defun orr (line)
+    (setq line (subseq line 2 (length line)))
+    (let ((p 0))
+        (loop
+            (if (string= " " (subseq line 0 1))
+                (progn
+                    (setq line (subseq line 1 (length line)))
+                    (if (string= (subseq line 0 1) "(")
+                        (progn
+                            (if (not (not (realevap line)))
+                                (return-from orr t)
+                            )
+                        )
+                        (progn
+                            (if (or (subtypep (type-of (read-from-string (car (space-split line)))) 'INTEGER) (subtypep (type-of (read-from-string (car (space-split line)))) 'float))
+                                (return-from orr t)
+                                (if (string= "\"" (subseq line 0 1))
+                                    (return-from orr t)
+                                    (if (string= (read-from-string (car (space-split line))) "T")
+                                        (return-from orr t)
+                                        (progn
+                                            (if (not (string= (read-from-string (car (space-split line))) "NIL"))
+                                                (if (string= ")" (subseq line 0 1))
+                                                    (return-from orr nil)
+                                                    (progn
+                                                        (print "SYNTAX_ERROR")
+                                                        (return-from orr)
+                                                    )
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                    (if (string= "(" (subseq line 0 1))
+                        (block del
+                            (loop
+                                (if (string= "(" (subseq line 0 1))
+                                    (progn
+                                        (setq p (+ p 1))
+                                        (setq line (subseq line 1 (length line)))
+                                    )
+                                    (if (string= ")" (subseq line 0 1))
+                                        (progn
+                                            (setq p (- p 1))
+                                            (setq line (subseq line 1 (length line)))
+                                        )
+                                        (setq line (subseq line 1 (length line)))
+                                    )
+                                )
+                                (if (= p 0)
+                                    (return-from del)
+                                )
+                            )
+                        )
+                        (block dell
+                            (loop
+                                (if (or (string= ")" (subseq line 0 1)) (string= " " (subseq line 0 1)))
+                                    (return-from dell)
+                                    (progn
+                                        (setq line (subseq line 1 (length line)))
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+                (progn
+                    (if (string= ")" (subseq line 0 1))
+                        (return-from orr nil)
+                        (progn
+                            (print "SYNTAX_ERROR")
+                            (return-from orr)
+                        )
+                    )
+                )
+            )
+        )
+    )
+)
+
+(defun equ (line)
+    (setq line (subseq line 5 (length line)))
+    (let ((result t) (one "") (two "") (p 0))
+        (if (string= " " (subseq line 0 1))
+            (progn 
+                (setq line (subseq line 1 (length line)))
+                (if (string= (subseq line 0 1) "(")
+                    (progn
+                        (setq one (realevap line))
+                        (block del
+                            (loop
+                                (if (string= "(" (subseq line 0 1))
+                                    (progn
+                                        (setq p (+ p 1))
+                                        (setq line (subseq line 1 (length line)))
+                                    )
+                                    (if (string= ")" (subseq line 0 1))
+                                        (progn
+                                            (setq p (- p 1))
+                                            (setq line (subseq line 1 (length line)))
+                                        )
+                                        (setq line (subseq line 1 (length line)))
+                                    )
+                                )
+                                (if (= p 0)
+                                    (return-from del)
+                                )
+                            )
+                        )
+                    )
+                    (progn
+                        (setq one (car (space-split line)))
+                        (block dell
+                            (loop
+                                (if (string= " " (subseq line 0 1))
+                                    (return-from dell)
+                                    (progn
+                                        (setq line (subseq line 1 (length line)))
+                                    )
+                                )
+                            )
+                        )
+                        
+                    )
+                )
+                (if (string= " " (subseq line 0 1))
+                    (progn
+                        (setq line (subseq line 1 (length line)))
+                        ;(print line)
+                        (if (string= (subseq line 0 1) "(")
+                            (progn
+                                (setq two (realevap line))
+                            )
+                            (progn
+                                ;(print (car (brace-split line)))
+                                (setq two (car (brace-split line)))
+                            )
+                        )
+                    )
+                    (progn
+                        (print "SYNTAX_ERROR")
+                        (return-from equ)
+                    )
+                )
+                (if (or (subtypep (type-of one) 'INTEGER) (subtypep (type-of one) 'float))
+                    (progn
+                        (setq one (write-to-string one :base 10))
+                    )
+                    (if (or (subtypep (type-of two) 'INTEGER) (subtypep (type-of two) 'float))
+                        (setq two (write-to-string two :base 10))
+                    )
+                )
+                (return-from equ (equal (read-from-string one) (read-from-string two)))
+            )
+            (progn
+                (print "SYNTAX_ERROR")
+                (return-from equ)
+            )
+        )
+    )
+)
+
+(defun nope (line)
+    (setq line (subseq line 3 (length line)))
+    (let ((result t))
+        (if (string= " " (subseq line 0 1))
+            (progn 
+                (setq line (subseq line 1 (length line)))
+                (if (string= (subseq line 0 1) "(")
+                    (progn
+                        ;(print (realevap line))
+                        (setq result (not (realevap line)))
+                    )
+                    (setq result (not line))
+                )
+            )
+            (progn
+                (print "SYNTAX_ERROR")
+                (return-from nope)
+            )
+        )
+    )
+)
+
+
+(defun lister (line)
+    (setq line (subseq line 4 (length line)))
+    ;(print line)
+    (let ((liste (list)) (p 0))
+        (loop
+            (if (string= " " (subseq line 0 1))
+                (progn
+                    (setq line (subseq line 1 (length line)))
+                    ;(print (subseq line 0 1))
+                    
+                    (if (string= (subseq line 0 1) "(")
+                        (progn
+                            (setq liste (append liste (list (realevap line))))
+                        )
+                        (progn
+                            (if (or (subtypep (type-of (read-from-string (car (space-split line)))) 'INTEGER) (subtypep (type-of (read-from-string (car (space-split line)))) 'float))
+                                (setq liste (append liste (list (read-from-string (car (space-split line))))))
+                                (if (string= "\"" (subseq line 0 1))
+                                    (progn
+                                        (setq line (subseq line 1 (length line)))
+                                        (setq liste (append liste (list (subseq (car (quote-split line)) 0 (length (car (quote-split line)))))))
+                                    )
+                                    (if (or (string= (read-from-string (car (space-split line))) "NIL") (string= (read-from-string (car (space-split line))) "T"))
+                                        (setq liste (append liste (list (read-from-string (car (space-split line))))))
+                                        (progn
+                                            (print "SYNTAX_ERROR")
+                                            (return-from lister)
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                    (if (string= "(" (subseq line 0 1))
+                        (block del
+                            (loop
+                                (if (string= "(" (subseq line 0 1))
+                                    (progn
+                                        (setq p (+ p 1))
+                                        (setq line (subseq line 1 (length line)))
+                                    )
+                                    (if (string= ")" (subseq line 0 1))
+                                        (progn
+                                            (setq p (- p 1))
+                                            (setq line (subseq line 1 (length line)))
+                                        )
+                                        (setq line (subseq line 1 (length line)))
+                                    )
+                                )
+                                (if (= p 0)
+                                    (return-from del)
+                                )
+                            )
+                        )
+                        (block dell
+                            (loop
+                                (if (or (string= ")" (subseq line 0 1)) (string= " " (subseq line 0 1)))
+                                    (return-from dell)
+                                    (progn
+                                        (setq line (subseq line 1 (length line)))
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+                (if (string= ")" (subseq line 0 1))
+                    (return-from lister liste)
+                    (progn
+                        (print "SYNTAX_ERROR")
+                        (return-from lister)
+                    )
+                )
+            )
+        )
+    )
+)
+
+
+(defun evap (line)
+    (if (and (string= ";" (subseq line 0 1)) (string= ";" (subseq line 1 2)))
+        (return-from evap)
+        (print  (realevap line))
+    )
+)
+
+(defun oper (line)
+    ;(print line)
+    (let ((sum 0) (op " ") (p 0) (behave 0) (midsum 0))
+        (setq op (subseq line 0 1))
+        (setq line (subseq line 1 (length line)))
+        (if (string= op "*")
+            (setq sum 1)
+            (if (or (string= op "/") (string= op "-"))
+                (setq behave 1)
+                (setq behave 0)
+            )
+        )
+        (loop
+            ;(print line)
+            (if (string= " " (subseq line 0 1))
+                (progn
+                    ;(print line)
+                    (setq line (subseq line 1 (length line)))
+                    (if (string= "(" (subseq line 0 1))
+                        (progn
+                            (setq midsum (realevap line))
+                            
+                            (block del
+                                (loop
+                                    (if (string= "(" (subseq line 0 1))
+                                        (progn
+                                            (setq p (+ p 1))
+                                            (setq line (subseq line 1 (length line)))
+                                        )
+                                        (if (string= ")" (subseq line 0 1))
+                                            (progn
+                                                (setq p (- p 1))
+                                                (setq line (subseq line 1 (length line)))
+                                            )
+                                            (setq line (subseq line 1 (length line)))
+                                        )
+                                    )
+                                    (if (= p 0)
+                                        (return-from del)
+                                    )
+                                )
+                            )
+                        )
+                        (progn
+                            (setq midsum (read-from-string (car (space-split line))))
+                            
+                            (block dell
+                                (loop
+                                    (if (or (string= ")" (subseq line 0 1)) (string= " " (subseq line 0 1)))
+                                        (return-from dell)
+                                        (progn
+                                            (setq line (subseq line 1 (length line)))
+                                            ;(print line)
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                    (if (string= op "-")
+                        (if (= behave 1)
+                            (progn
+                                (setq sum (+ sum midsum))
+                                (setq behave 0)
+                            )
+                            (setq sum (- sum midsum))
+                        )
+                        (if (string= op "/")
+                            (if (= behave 1)
+                                (progn
+                                    (setq sum (+ sum midsum))
+                                    (setq behave 0)
+                                )
+                                (setq sum (/ sum midsum))
+                            )
+                            (if (string= op "+")
+                                (setq sum (+ sum midsum))
+                                (setq sum (* sum midsum))
+                            )
+                        )
+                    )
+                    
+                )
+                (if (string= ")" (subseq line 0 1))
+                    (return-from oper sum)
+                    (progn
+                        (print "SYNTAX_ERROR")
+                        (return-from oper)
+                    )
+                )
+            )
+        )
+    )
+)
+
+(defun space-split (string)
+    (loop for start = 0 then (1+ finish)
+        for finish = (position #\Space string :start start)
+        collecting (subseq string start finish)
+        until (null finish)
+    )
+)
+
+(defun quote-split (string)
+    (loop for start = 0 then (1+ finish)
+        for finish = (position #\" string :start start)
+        collecting (subseq string start finish)
+        until (null finish)
+    )
+)
+
+(defun brace-split (string)
+    (loop for start = 0 then (1+ finish)
+        for finish = (position #\) string :start start)
+        collecting (subseq string start finish)
+        until (null finish)
+    )
+)
+
+
+;(print (- 3 4 5 6))
+
+;(gppinterpreter)
+
+(gppinterpreter "input.txt")
